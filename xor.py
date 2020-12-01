@@ -1,64 +1,92 @@
-#TODO:
-#Create class containing weights as matricies
-#declare methods for forward pass and backpropagation
-
 import numpy as np
 import math
 
+class Layer:
+    def __init__(this, dimension, bias):
+        this.dimension = dimension
+        this.bias = bias
+        this.create()
+        if(bias):
+            this.initBias()
+
+    def create(this):
+        this.nodes = np.zeros(this.dimension)
+
+    def initBias(this):
+        this.biasValues = np.array(np.random.random_sample(this.dimension)*2-1)
+
+    def getBias(this):
+        if this.bias:
+            return this.biasValues
+
+    def dim(this):
+        return this.dimension
+
+    def hasBias(this):
+        return this.bias
+
+    def getNodes(this):
+        return this.nodes
+
+    def setNodes(this, nodes):
+        this.nodes = nodes
+
+
+
+
+
 class ANN:
 
-    def __init__(this, inputD, outputD,  hiddenD, hiddenL):
-        this.inputD = inputD
-        this.outputD = outputD
-        this.hiddenD = hiddenD
-        this.hiddenL = hiddenL
-
+    def __init__(this, layers):
+        this.layers = layers
+        this.inputLayer = layers[0]
+        this.outputLayer = layers[len(this.layers)-1]
+        this.layerLength = len(this.layers)
         this.create()
 
     def create(this):
+        this.weights  = []
+        for l in range(this.layerLength-1):
+            temp = np.array(np.random.random_sample((len(this.layers[l].getNodes()),len(this.layers[l+1].getNodes())))*2-1)
+            this.weights.append(temp)
 
-        this.weightsIH = np.array(np.random.random_sample((this.inputD,this.hiddenD))*2-1)
-        this.weightsHO = np.array(np.random.random_sample((this.hiddenD,this.outputD))*2-1)
-        this.bias = np.array(np.random.random_sample(this.hiddenD)*2-1)
-        this.input = np.zeros(this.inputD)
-        this.hidden = np.zeros(this.hiddenD)
-        this.output = np.zeros(this.outputD)
+    def printLayers(this):
+        print('-- Layer Neuron Values --')
+        for l in range(this.layerLength):
+            layer = this.layers[l]
+            print(layer.getNodes())
+            print('----')
 
     def printWeights(this):
-        print("Input to hidden: \n",this.weightsIH)
-        print("Hidden to output: \n",this.weightsHO)
-        print("Hidden bias: \n",this.bias)
+        print('-- Layer Weight Values --')
+        for l in range(this.layerLength-1):
+            weightSet = this.weights[l]
+            print(weightSet)
+            print('----')
 
-    def printNodes(this):
-        print("Input: \n",this.input)
-        print("Hidden: \n",this.hidden)
-        print("Output: \n",this.output)
+    def setInputLayerData(this,layer):
+        this.inputLayer.setNodes(layer)
 
-    def printOutput(this):
-        print("Output: \n",this.output)
+    def getOutputData():
+        return this.outputLayer.getNodes()
 
-    def predict(this, input):
-        this.input = input
-        this.forward()
+    def predict(this):
+        for l in range(this.layerLength-1):
+            nodes = this.layers[l+1].getNodes() #get neurons of first layer after input
+            nodes = np.zeros(len(nodes)) #zero the neurons
+            inNodes = this.layers[l].getNodes()
+            tempWeights = this.weights[l] #get first weight set of net
+            for y in range(tempWeights.shape[1]):
+                for x in range(tempWeights.shape[0]):
+                    nodes[y] += inNodes[x]*tempWeights[x][y]
 
-    def forward(this):
-        this.hidden = np.zeros(this.hiddenD)
-        for x in range(this.hiddenD):
-            for y in range(this.inputD):
-                this.hidden[x] += this.input[y]*this.weightsIH[y][x]
+            if(this.layers[l+1].hasBias()):
+                tempBias = this.layers[l+1].getBias()
+                for node in range(this.layers[l+1].dim()):
+                    nodes[node] += tempBias[node]
 
-        this.hidden = this.addBias(this.hidden)
-        this.hidden = this.activate(this.hidden)
-        this.output = np.zeros(this.outputD)
-        for x in range(this.outputD):
-            for y in range(this.hiddenD):
-                this.output[x] += this.hidden[y]*this.weightsHO[y][x]
-        this.output = this.activate(this.output)
-
-    def addBias(this, nodes):
-        for x in range(nodes.size):
-            nodes[x] += this.bias[x]
-        return nodes
+            nodes = this.activate(nodes)
+            this.layers[l+1].setNodes(nodes)
 
     def activate(this, nodes):
         for x in range(nodes.size):
@@ -72,13 +100,34 @@ class ANN:
     def train(this, input, solution, learningRate, epoch):
         this.learningRate = learningRate
         this.epoch = epoch
-        while(this.epoch > 0):
-            this.epoch -= 1
+
+        for ep in range(epoch):
+            # Choose sample to learn
             ind = math.floor(np.random.random()*(input.shape[0]))
-            count[ind] +=1
-            this.predict(input[ind])
-            loss = this.output - solution[ind]
-            print("Epoch: ",this.epoch," Input: ",input[ind]," Output: ",this.output," Solution: ",solution[ind]," Error: ",loss)
+
+            # predict sample
+            this.setInputLayerData(input[ind])
+            this.predict()
+            result = this.outputLayer.getNodes()
+
+            #calculate difference between label and prediction
+            loss = np.subtract(result,solution[ind])
+
+            print("Epoch: ",ep," Input: ",input[ind]," Output: ",result," Solution: ",solution[ind]," Error: ",loss)
+
+            for l in range(this.layerLength-1,0,-1): #go throught all layers back to front (l is *TO* layer)
+                weightLayerIndex = l-1
+                print(this.weights[weightLayerIndex])
+                if(this.layers[l].hasBias()): # update the bias weights if the layer has any
+                    pass
+
+
+            # Change weights of hidden to output layer accordingly.
+            for j in range(this.hiddenD):
+                for k in range(this.outputD):
+                    delta_weight = this.hidden[j] * loss * this.derivActivate(this.output)
+                    this.weightsHO[j][k] -= learningRate * delta_weight
+
 
             # Now for the hidden layer.
             hidden_deltas = [0.0]*this.hiddenD
@@ -88,20 +137,13 @@ class ANN:
                     error+=this.weightsHO[j][k] * loss * this.derivActivate(this.output)
                 hidden_deltas[j] = error * this.derivActivate(this.hidden[j])
 
-            # Change weights of hidden to output layer accordingly.
-            for j in range(this.hiddenD):
-                for k in range(this.outputD):
-                    delta_weight = this.hidden[j] * loss * this.derivActivate(this.output)
-                    this.weightsHO[j][k] -= learningRate * delta_weight
-
-
-
+            #update weights
             for i in range(this.inputD):
                 for j in range(this.hiddenD):
                     delta_weight = hidden_deltas[j] * this.input[i]
                     this.weightsIH[i][j] -= learningRate*delta_weight
 
-
+            #update bias
             for i in range(this.hiddenD):
                     delta_weight = hidden_deltas[i] * 1
                     this.bias[i] -= learningRate * delta_weight
@@ -115,19 +157,33 @@ class ANN:
 
 
 if __name__ == "__main__":
-    net = ANN(2,1,6,1)
+
+    l1 = Layer(2,False)
+    l2 = Layer(10,True)
+    l3 = Layer(1,False)
+
+    layers = []
+    layers.append(l1)
+    layers.append(l2)
+    layers.append(l3)
+
+    net = ANN(layers)
+    #input = np.array([0,1][][][])
+
     input = np.array([[0,0],[0,1],[1,0],[1,1]])
     output = np.array([[0],[1],[1],[0]])
+    net.train(input,output,0.2,1000)
+
     #net.predict(input)
-    net.train(input,output,0.2,10000)
-    net.predict([0,0])
-    net.printOutput()
+    #net.train(input,output,0.2,10000)
+    #net.predict([0,0])
+    #net.printOutput()
 
-    net.predict([0,1])
-    net.printOutput()
+    #net.predict([0,1])
+    #net.printOutput()
 
-    net.predict([1,0])
-    net.printOutput()
+    #net.predict([1,0])
+    #net.printOutput()
 
-    net.predict([1,1])
-    net.printOutput()
+    #net.predict([1,1])
+    #net.printOutput()
