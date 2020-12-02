@@ -1,5 +1,9 @@
+
 import numpy as np
 import math
+import time
+from keras.datasets import mnist
+from matplotlib import pyplot
 
 class Layer:
     def __init__(this, dimension, bias):
@@ -93,15 +97,16 @@ class ANN:
             nodes[x] = (1/(1+pow(math.e,-nodes[x])))
         return nodes
 
-    def derivActivate(this, node):
-        node = node*(1-node)
-        return node
+    def derivActivate(this, nodes):
+        for x in range(nodes.size):
+            nodes[x] = nodes[x]*(1-nodes[x])
+        return nodes
 
     def train(this, input, solution, learningRate, epoch):
         this.learningRate = learningRate
         this.epoch = epoch
-
         for ep in range(epoch):
+
             # Choose sample to learn
             ind = math.floor(np.random.random()*(input.shape[0]))
 
@@ -109,42 +114,53 @@ class ANN:
             this.setInputLayerData(input[ind])
             this.predict()
             result = this.outputLayer.getNodes()
+
+            #calculate the mean squared error
             mSqErr = this.loss(solution[ind],result)
 
             #calculate difference between label and prediction
             loss = np.subtract(result,solution[ind])
 
-            print("Epoch: ",ep," Input: ",input[ind]," Output: ",np.round(result,2)," Solution: ",solution[ind]," Error: ",np.round(mSqErr,4))
+            print("Epoch: ",ep," Error: ",np.round(mSqErr,4))
+            #print("Epoch: \t",ep," MSqErr: \t",np.round(mSqErr,4)," \n Loss: \t",np.round(loss,3))
+
 
             for l in range(this.layerLength-1,0,-1): #go throught all layers back to front (l is *TO* layer)
-                weightLayerIndex = l-1 # index of the weightlayer containing from - to weights
-                activeWeightSet = this.weights[weightLayerIndex]
+
+                activeWeightSet = this.weights[l-1]
                 toNodes = this.layers[l].getNodes()
                 fromNodes = this.layers[l-1].getNodes()
+                fromSize = activeWeightSet.shape[0]
+                toSize = activeWeightSet.shape[1]
+                if(l>1):
+                    propagatedLoss = np.zeros(fromSize)
+
+                derivToNodes = this.derivActivate(toNodes)
 
                 # Change weights between from/to layer
-                for f in range(activeWeightSet.shape[0]):
-                    for t in range(activeWeightSet.shape[1]):
-                        delta_weight = fromNodes[f] * loss[t] * this.derivActivate(toNodes[t])
-                        activeWeightSet[f][t] -= learningRate * delta_weight
-
-                # update the bias weights if the layer has any
                 if(this.layers[l].hasBias()):
                     biasWeight = this.layers[l].getBias()
-                    for t in range(activeWeightSet.shape[1]):
-                            delta_weight = 1 * loss[t] * this.derivActivate(toNodes[t])
-                            biasWeight[t] -= learningRate * delta_weight
+                    for f in range(fromSize):
+                        for t in range(toSize):
+                            activeWeightSet[f][t] -= learningRate * fromNodes[f] * loss[t] * derivToNodes[t]
+                            if(l>1):
+                                propagatedLoss[f] += activeWeightSet[f][t] * loss[t]
+                            if(f==0):
+                                biasWeight[t] -= learningRate * loss[t] * derivToNodes[t]
+                else:
+                    for f in range(fromSize):
+                        for t in range(toSize):
+                            activeWeightSet[f][t] -= learningRate * fromNodes[f] * loss[t] * derivToNodes[t]
+                            if(l>1):
+                                propagatedLoss[f] += activeWeightSet[f][t] * loss[t]
+                if(l>1):
+                    loss = this.normalize(propagatedLoss)
 
-                # Update the loss for the next iteration
-                propagatedLoss = [0.0]*activeWeightSet.shape[0]
-                for f in range(activeWeightSet.shape[0]):
-                    for t in range(activeWeightSet.shape[1]):
-                        propagatedLoss[f] += activeWeightSet[f][t] * loss[t]
+                this.weights[l-1] = activeWeightSet
 
-                loss = this.normalize(propagatedLoss)
 
     def loss(this, solution ,output):
-        loss = 0.5*(pow(np.subtract(output,solution),2))
+        loss = np.sum(0.5*(pow(np.subtract(output,solution),2)))
         return loss
 
     def normalize(this, array):
@@ -158,42 +174,78 @@ class ANN:
         return array
 
 
+def oneHot(input):
+    output = np.array(input)
+    outputOneHot = np.zeros((output.shape[0],10))
+    for x in range(output.shape[0]):
+        outputOneHot[x][output[x]] = 1
+    print("Labels loaded: ",output.shape[0])
+    return outputOneHot
+
+def preprocMnist(input):
+    input = np.array(input)
+    print("Inputs loaded: ",input.shape[0])
+    input = input.reshape(1,input.shape[0],784)
+    input = np.true_divide(input, 255.0)
+    return input[0]
 
 if __name__ == "__main__":
 
-    l1 = Layer(2,False)
-    l2 = Layer(10,True)
-    l3 = Layer(10,True)
-    l4 = Layer(1,False)
+    (train_X, train_y), (test_X, test_y) = mnist.load_data(path="./mnist.npz")
 
+    print("Mnist data loaded")
     layers = []
-    layers.append(l1)
-    layers.append(l2)
-    layers.append(l3)
-    layers.append(l4)
-
+    layers.append(Layer(784,False))
+    layers.append(Layer(40,True))
+    layers.append(Layer(20,True))
+    layers.append(Layer(40,True))
+    layers.append(Layer(784,True))
     net = ANN(layers)
-    #net.printWeights()
 
-    input = np.array([[0,0],[0,1],[1,0],[1,1]])
-    output = np.array([[0],[1],[1],[0]])
-    net.train(input,output,0.2,10000)
-    net.printWeights()
 
-    #net.predict(input)
-    #net.train(input,output,0.2,10000)
-    net.setInputLayerData([0,0])
+    input = preprocMnist(train_X)
+    #output = oneHot(train_y)
+
+
+    print("Mnist train preprocessed")
+
+
+    print("Training starting...")
+    start = time.process_time()
+
+    net.train(input,input,0.02,5000)
+
+    end = time.process_time()
+    print("Training finished...")
+    print("Runtime: \t",(end-start)," s")
+
+    input = preprocMnist(test_X)
+
+    net.setInputLayerData(input[1])
     net.predict()
-    print(net.getOutputData())
+    result = net.getOutputData()
 
-    net.setInputLayerData([0,1])
-    net.predict()
-    print(net.getOutputData())
 
-    net.setInputLayerData([1,0])
-    net.predict()
-    print(net.getOutputData())
+    fig=pyplot.figure(figsize=(28, 28))
+    fig.add_subplot(1,2,1)
+    pyplot.imshow(input[1].reshape(28,28))
+    fig.add_subplot(1,2,2)
+    pyplot.imshow(result.reshape(28,28))
+    pyplot.show()
 
-    net.setInputLayerData([1,1])
-    net.predict()
-    print(net.getOutputData())
+    # input = preprocMnist(test_X)
+    # output = oneHot(test_y)
+    # solved = 0
+    # print("Testing ...")
+    # for i in range(len(input)):
+    #     net.setInputLayerData(input[i])
+    #     net.predict()
+    #     result = net.getOutputData()
+    #     ind = 0
+    #     for t in range(len(result)):
+    #         ind = t if result[t]>result[ind] else ind
+    #     #print("Truth: ",test_y[i]," Predicted: ",ind)
+    #     if(test_y[i] == ind):
+    #         solved += 1
+    #
+    # print("Precision: ",((float(solved)/float(len(input)))*100.0),"%")
