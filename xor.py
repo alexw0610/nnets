@@ -67,7 +67,7 @@ class ANN:
     def setInputLayerData(this,layer):
         this.inputLayer.setNodes(layer)
 
-    def getOutputData():
+    def getOutputData(this):
         return this.outputLayer.getNodes()
 
     def predict(this):
@@ -109,50 +109,53 @@ class ANN:
             this.setInputLayerData(input[ind])
             this.predict()
             result = this.outputLayer.getNodes()
+            mSqErr = this.loss(solution[ind],result)
 
             #calculate difference between label and prediction
             loss = np.subtract(result,solution[ind])
 
-            print("Epoch: ",ep," Input: ",input[ind]," Output: ",result," Solution: ",solution[ind]," Error: ",loss)
+            print("Epoch: ",ep," Input: ",input[ind]," Output: ",np.round(result,2)," Solution: ",solution[ind]," Error: ",np.round(mSqErr,4))
 
             for l in range(this.layerLength-1,0,-1): #go throught all layers back to front (l is *TO* layer)
-                weightLayerIndex = l-1
-                print(this.weights[weightLayerIndex])
-                if(this.layers[l].hasBias()): # update the bias weights if the layer has any
-                    pass
+                weightLayerIndex = l-1 # index of the weightlayer containing from - to weights
+                activeWeightSet = this.weights[weightLayerIndex]
+                toNodes = this.layers[l].getNodes()
+                fromNodes = this.layers[l-1].getNodes()
 
+                # Change weights between from/to layer
+                for f in range(activeWeightSet.shape[0]):
+                    for t in range(activeWeightSet.shape[1]):
+                        delta_weight = fromNodes[f] * loss[t] * this.derivActivate(toNodes[t])
+                        activeWeightSet[f][t] -= learningRate * delta_weight
 
-            # Change weights of hidden to output layer accordingly.
-            for j in range(this.hiddenD):
-                for k in range(this.outputD):
-                    delta_weight = this.hidden[j] * loss * this.derivActivate(this.output)
-                    this.weightsHO[j][k] -= learningRate * delta_weight
+                # update the bias weights if the layer has any
+                if(this.layers[l].hasBias()):
+                    biasWeight = this.layers[l].getBias()
+                    for t in range(activeWeightSet.shape[1]):
+                            delta_weight = 1 * loss[t] * this.derivActivate(toNodes[t])
+                            biasWeight[t] -= learningRate * delta_weight
 
+                # Update the loss for the next iteration
+                propagatedLoss = [0.0]*activeWeightSet.shape[0]
+                for f in range(activeWeightSet.shape[0]):
+                    for t in range(activeWeightSet.shape[1]):
+                        propagatedLoss[f] += activeWeightSet[f][t] * loss[t]
 
-            # Now for the hidden layer.
-            hidden_deltas = [0.0]*this.hiddenD
-            for j in range(this.hiddenD):
-                error=0.0
-                for k in range(this.outputD):
-                    error+=this.weightsHO[j][k] * loss * this.derivActivate(this.output)
-                hidden_deltas[j] = error * this.derivActivate(this.hidden[j])
+                loss = this.normalize(propagatedLoss)
 
-            #update weights
-            for i in range(this.inputD):
-                for j in range(this.hiddenD):
-                    delta_weight = hidden_deltas[j] * this.input[i]
-                    this.weightsIH[i][j] -= learningRate*delta_weight
-
-            #update bias
-            for i in range(this.hiddenD):
-                    delta_weight = hidden_deltas[i] * 1
-                    this.bias[i] -= learningRate * delta_weight
-
-
-    def loss(this, solution):
-        loss = 0.5*(pow((solution - this.output),2))
+    def loss(this, solution ,output):
+        loss = 0.5*(pow(np.subtract(output,solution),2))
         return loss
 
+    def normalize(this, array):
+        biggestElement = 0
+        for x in range(len(array)):
+            biggestElement = abs(array[x]) if abs(array[x])>biggestElement else biggestElement
+
+        for x in range(len(array)):
+            array[x] = array[x]/biggestElement
+
+        return array
 
 
 
@@ -160,30 +163,37 @@ if __name__ == "__main__":
 
     l1 = Layer(2,False)
     l2 = Layer(10,True)
-    l3 = Layer(1,False)
+    l3 = Layer(10,True)
+    l4 = Layer(1,False)
 
     layers = []
     layers.append(l1)
     layers.append(l2)
     layers.append(l3)
+    layers.append(l4)
 
     net = ANN(layers)
-    #input = np.array([0,1][][][])
+    #net.printWeights()
 
     input = np.array([[0,0],[0,1],[1,0],[1,1]])
     output = np.array([[0],[1],[1],[0]])
-    net.train(input,output,0.2,1000)
+    net.train(input,output,0.2,10000)
+    net.printWeights()
 
     #net.predict(input)
     #net.train(input,output,0.2,10000)
-    #net.predict([0,0])
-    #net.printOutput()
+    net.setInputLayerData([0,0])
+    net.predict()
+    print(net.getOutputData())
 
-    #net.predict([0,1])
-    #net.printOutput()
+    net.setInputLayerData([0,1])
+    net.predict()
+    print(net.getOutputData())
 
-    #net.predict([1,0])
-    #net.printOutput()
+    net.setInputLayerData([1,0])
+    net.predict()
+    print(net.getOutputData())
 
-    #net.predict([1,1])
-    #net.printOutput()
+    net.setInputLayerData([1,1])
+    net.predict()
+    print(net.getOutputData())
