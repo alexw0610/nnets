@@ -2,6 +2,8 @@
 import numpy as np
 from numpy import asarray
 from numpy import save
+from numpy import load
+
 import math
 import time
 from keras.datasets import mnist
@@ -25,6 +27,9 @@ class Layer:
     def getBias(this):
         if this.bias:
             return this.biasValues
+
+    def setBias(this,bias):
+        this.biasValues = bias
 
     def dim(this):
         return this.dimension
@@ -63,6 +68,10 @@ class ANN:
             layer = this.layers[l]
             print(layer.getNodes())
             print('----')
+            if(layer.hasBias()):
+                print('-- Bias --')
+                print(layer.getBias())
+                print('----')
 
     def printWeights(this):
         print('-- Layer Weight Values --')
@@ -188,53 +197,26 @@ class ANN:
         return array
 
     def persistToDisk(this,path):
-        with open(path,"wb") as output:
-            weights = this.weights
-            layers = this.layers
-            count = 0
-            for layer in range(len(weights)):
-                activeWeightSet = weights[layer]
-                fromSize = activeWeightSet.shape[0] # The dimension of the previous Layer
-                toSize = activeWeightSet.shape[1] # The dimension of the next Layer
-                for f in range(fromSize):
-                        float_array = array('d', activeWeightSet[f])
-                        float_array.tofile(output)
-                        count += activeWeightSet[f].shape[0]
-            for layer in range(len(layers)):
-                if layers[layer].hasBias():
-                    biasWeights = layers[layer].getBias()
-                    float_array = array('d', biasWeights)
-                    float_array.tofile(output)
-                    count += biasWeights.shape[0]
-
-
-            output.close()
-            print("Saved ",count,"weights to ",path)
+            data = asarray(this.weights)
+            save(path+".weights",data,allow_pickle=True)
+            biaslist = []
+            for layer in range(len(this.layers)):
+                if this.layers[layer].hasBias():
+                    biaslist.append(this.layers[layer].getBias())
+            bias = asarray(biaslist)
+            save(path+".bias",bias)
+            print("Saved weights to ",path)
 
     def loadFromDisk(this,path):
-        with open(path,"rb") as input:
-            weights = this.weights
-            layers = this.layers
+            dataW = load(path+".weights.npy",allow_pickle=True)
+            this.weights = dataW
+            dataB = load(path+".bias.npy",allow_pickle=True)
             count = 0
-            for layer in range(len(weights)):
-                activeWeightSet = weights[layer]
-                fromSize = activeWeightSet.shape[0] # The dimension of the previous Layer
-                toSize = activeWeightSet.shape[1] # The dimension of the next Layer
-                for f in range(fromSize):
-                        float_array = array('d')
-                        float_array.fromfile(input,activeWeightSet[f].shape[0])
-                        activeWeightSet[f] = np.array(float_array.tolist())
-                        count += activeWeightSet[f].shape[0]
-            for layer in range(len(layers)):
-                if layers[layer].hasBias():
-                    biasWeights = layers[layer].getBias()
-                    float_array = array('d')
-                    float_array.fromfile(input,biasWeights.shape[0])
-                    biasWeights = np.array(float_array.tolist())
-                    count += biasWeights.shape[0]
-
-            input.close()
-            print("Loaded ",count,"weights from ",path)
+            for layer in range(len(this.layers)):
+                if this.layers[layer].hasBias() == True:
+                    this.layers[layer].setBias(dataB[count])
+                    count += 1
+            print("Loaded weights from ",path)
 
 
 
@@ -276,7 +258,7 @@ if __name__ == "__main__":
 
     #print("Mnist train preprocessed")
 
-    net.loadFromDisk("./xor.weights")
+    net.loadFromDisk("./xor")
 
     print("Training starting...")
     start = time.process_time()
@@ -292,7 +274,7 @@ if __name__ == "__main__":
     #pyplot.plot(mSqErrBand)
     #pyplot.show()
 
-    #net.persistToDisk("./xor.weights")
+    #net.persistToDisk("./xor")
 
     net.setInputLayerData(input[0])
     net.predict()
