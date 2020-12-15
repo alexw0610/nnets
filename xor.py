@@ -3,7 +3,7 @@ import numpy as np
 from numpy import asarray
 from numpy import save
 from numpy import load
-
+import random
 import math
 import time
 from keras.datasets import mnist
@@ -11,9 +11,10 @@ from matplotlib import pyplot
 from array import array
 
 class Layer:
-    def __init__(this, dimension, bias):
+    def __init__(this, dimension, bias, identifier):
         this.dimension = dimension
         this.bias = bias
+        this.identifier = identifier
         this.create()
         if(bias):
             this.initBias()
@@ -68,10 +69,10 @@ class ANN:
             layer = this.layers[l]
             print(layer.getNodes())
             print('----')
-            if(layer.hasBias()):
-                print('-- Bias --')
-                print(layer.getBias())
-                print('----')
+            #if(layer.hasBias()):
+            #    print('-- Bias --')
+            #    print(layer.getBias())
+            #    print('----')
 
     def printWeights(this):
         print('-- Layer Weight Values --')
@@ -82,12 +83,18 @@ class ANN:
 
     def setInputLayerData(this,layer):
         this.inputLayer.setNodes(layer)
+    
+    def setLayerData(this, layer, nmbr):
+        this.layers[nmbr].setNodes(layer)
+
+    def getLayerData(this, nmbr):
+        return this.layers[nmbr].getNodes()
 
     def getOutputData(this):
         return this.outputLayer.getNodes()
 
-    def predict(this):
-        for l in range(this.layerLength-1):
+    def predict(this,start):
+        for l in range(start,this.layerLength-1):
             nodes = this.layers[l+1].getNodes() #get neurons of first layer after input
             nodes = np.zeros(len(nodes)) #zero the neurons
             inNodes = this.layers[l].getNodes()
@@ -114,7 +121,7 @@ class ANN:
             nodes[x] = nodes[x]*(1-nodes[x])
         return nodes
 
-    def train(this, input, solution, learningRate, epoch):
+    def train(this, input, solution, learningRate, epoch, forwardStart, start, end):
         this.epoch = epoch
         mSQErrBand = [0]*epoch
         this.learningRate = learningRate
@@ -125,16 +132,9 @@ class ANN:
             ind = math.floor(np.random.random()*(input.shape[0]))
 
             # predict sample
-            this.setInputLayerData(input[ind])
-            this.predict()
-            result = this.outputLayer.getNodes()
-
-            #calculate the learning Rate
-            #learningRate = (1/(1+decay*ep))*learningRate
-            #learningRate = pow(decay,epoch)*learningRate
-            #learningRate = learningRate*((epoch-ep)/epoch)
-            #learningRate = (learningRate * (1/(1+decay*ep)))+0.001
-
+            this.setLayerData(input[ind],forwardStart)
+            this.predict(forwardStart)
+            result = this.getOutputData()
 
             #calculate the mean squared error
             mSqErr = this.loss(solution[ind],result)
@@ -148,37 +148,41 @@ class ANN:
 
             for l in range(this.layerLength-1,0,-1): # Go throught all layers back to front (l is *TO* layer)
 
-                activeWeightSet = this.weights[l-1] # The weight set connecting the previous and next Layer
+                activeWeightSet = np.array(this.weights[l-1],copy=True) # The weight set connecting the previous and next Layer
                 toNodes = this.layers[l].getNodes() # The node values of the next Layer
                 fromNodes = this.layers[l-1].getNodes() # The node values of the previous Layer
                 fromSize = activeWeightSet.shape[0] # The dimension of the previous Layer
                 toSize = activeWeightSet.shape[1] # The dimension of the next Layer
-                if(l>1): # Only propagate the loss for the next layer when we are not at the last layer
-                    propagatedLoss = np.zeros(fromSize)
+                #if(l>1): # Only propagate the loss for the next layer when we are not at the last layer
+                propagatedLoss = np.zeros(fromSize)
                 derivToNodes = this.derivActivate(toNodes)
-
+                biasWeight = np.zeros(toSize)
                 # Change weights between from/to layer
                 if(this.layers[l].hasBias()): # Layer has bias weights attached
-                    biasWeight = this.layers[l].getBias()
+                    biasWeight = np.array(this.layers[l].getBias(),copy=True)
                     for f in range(fromSize):
                         for t in range(toSize):
+                 #           if(l>1): # Only propagate the loss for the next layer when we are not at the last layer
+                            propagatedLoss[f] += activeWeightSet[f][t] * loss[t]
                             activeWeightSet[f][t] -= learningRate * fromNodes[f] * loss[t] * derivToNodes[t]
-                            if(l>1): # Only propagate the loss for the next layer when we are not at the last layer
-                                propagatedLoss[f] += activeWeightSet[f][t] * loss[t]
                             if(f==0): # Only update the bias weights once while going through TO Nodes
                                 biasWeight[t] -= learningRate * loss[t] * derivToNodes[t]
 
                 else: # Layer has NO bias weights attached
                     for f in range(fromSize):
                         for t in range(toSize):
+                            #if(l>1): # Only propagate the loss for the next layer when we are not at the last layer
+                            propagatedLoss[f] += activeWeightSet[f][t] * loss[t]
                             activeWeightSet[f][t] -= learningRate * fromNodes[f] * loss[t] * derivToNodes[t]
-                            if(l>1): # Only propagate the loss for the next layer when we are not at the last layer
-                                propagatedLoss[f] += activeWeightSet[f][t] * loss[t]
 
-                if(l>1): # Only propagate the loss for the next layer when we are not at the last layer
-                    loss = this.normalize(propagatedLoss)
-
-                this.weights[l-1] = activeWeightSet
+                #if(l>1): # Only propagate the loss for the next layer when we are not at the last layer
+                loss = this.normalize(propagatedLoss)
+                if l-1 >=start and l-1 <end:
+                    #print("updated weight",l-1)
+                    this.weights[l-1] = activeWeightSet
+                    if(this.layers[l].hasBias()): # Layer has bias weights attached
+                        tempWeight = this.layers[l].getBias()
+                        tempWeight = biasWeight
 
         return mSQErrBand
 
@@ -239,74 +243,61 @@ def preprocMnist(input):
 
 if __name__ == "__main__":
 
-    #(train_X, train_y), (test_X, test_y) = mnist.load_data(path="./mnist.npz")
+    (train_X, train_y), (test_X, test_y) = mnist.load_data(path="./mnist.npz")
 
-    #print("Mnist data loaded")
-    layers = []
-    layers.append(Layer(2,False))
-    layers.append(Layer(16,True))
-    layers.append(Layer(1,True))
+    print("Mnist data loaded")
 
-    net = ANN(layers)
+    layersDisc = []
+    layersDisc.append(Layer(10,False,"gen"))
+    layersDisc.append(Layer(32,True,"gen"))
+    layersDisc.append(Layer(32,True,"gen"))
+    layersDisc.append(Layer(784,True,"disc"))
+    layersDisc.append(Layer(32,True,"disc"))
+    layersDisc.append(Layer(32,True,"disc"))
+    layersDisc.append(Layer(1,True,"disc"))
+    
+    net = ANN(layersDisc)
+    #net.loadFromDisk("./net")
 
+    input = preprocMnist(train_X)
+    output = oneHot(train_y)
+    
+    #net.setLayerData(input[0],2)
+    #net.predict(2)
+    #net.printWeights()
+    #net.train(np.array(np.random.random_sample((10,1))),np.array(np.random.random_sample((10,1))),0.2,5,0,2)
+    #net.train(input,np.zeros(60000),22,5,0,4)
+    #net.printWeights()
+    #net.persistToDisk("./net")
+    #print("Training starting..")
+    net.loadFromDisk("./netBatch")
 
-    #input = preprocMnist(train_X)
-    #output = oneHot(train_y)
+    for cycle in range(5):
+        #net.train(input[120*cycle:120*(cycle+1)],np.ones(120),0.015,120,3,3,6)
+        #net.train(np.array(np.random.random_sample((120,10))),np.zeros(120),0.015,120,0,3,6)
+        net.train(np.array(np.random.random_sample((240,10))),np.ones(240),0.02,240,0,0,3) 
+        if cycle%10 == 0:
+            #net.persistToDisk("./netBatch")
+            print("Saved net to disk.")
+    
+    #net.persistToDisk("./netBatch")
+    print("Training finished..")
 
-    input = np.array([[0,0],[0,1],[1,0],[1,1]])
-    output = np.array([[0],[1],[1],[0]])
+    fig=pyplot.figure(figsize=(10, 8))
+    
+    for cycle in range(6):
+        input = np.array(np.random.random_sample(10))
+        net.setLayerData(input,0)
+        net.predict(0)
 
-    #print("Mnist train preprocessed")
+        label = net.getOutputData()
+        img = net.getLayerData(3)
+        print(label)
+        fig.add_subplot(2,3,cycle+1)
+        pyplot.imshow(img.reshape(28,28))
 
-    net.loadFromDisk("./xor")
-
-    print("Training starting...")
-    start = time.process_time()
-
-    #mSqErrBand = net.train(input,output,0.03,20000)
-
-    end = time.process_time()
-    print("Training finished...")
-    print("Runtime: \t",(end-start)," s")
-
-    #input = preprocMnist(test_X)
-
-    #pyplot.plot(mSqErrBand)
-    #pyplot.show()
-
-    #net.persistToDisk("./xor")
-
-    net.setInputLayerData(input[0])
-    net.predict()
-    print(net.getOutputData())
-
-    net.setInputLayerData(input[1])
-    net.predict()
-    print(net.getOutputData())
-
-    net.setInputLayerData(input[2])
-    net.predict()
-    print(net.getOutputData())
-
-    net.setInputLayerData(input[3])
-    net.predict()
-    print(net.getOutputData())
-
-    # fig=pyplot.figure(figsize=(14, 10))
-    #
-    # for p in range(4*4):
-    #     net.setInputLayerData(input[p])
-    #     net.predict()
-    #     result = net.getOutputData()
-    #
-    #     fig.add_subplot(4,8,p*2+1)
-    #     pyplot.imshow(input[p].reshape(28,28))
-    #
-    #     fig.add_subplot(4,8,p*2+2)
-    #     pyplot.imshow(result.reshape(28,28))
-    #
-    # print("Showing results")
-    # pyplot.show()
+    print("Showing results")
+    pyplot.show()
 
     # input = preprocMnist(test_X)
     # output = oneHot(test_y)
