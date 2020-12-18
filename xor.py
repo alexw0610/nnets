@@ -11,10 +11,9 @@ from matplotlib import pyplot
 from array import array
 
 class Layer:
-    def __init__(this, dimension, bias, identifier):
+    def __init__(this, dimension, bias):
         this.dimension = dimension
         this.bias = bias
-        this.identifier = identifier
         this.create()
         if(bias):
             this.initBias()
@@ -121,11 +120,14 @@ class ANN:
             nodes[x] = nodes[x]*(1-nodes[x])
         return nodes
 
+    #forwardStart marks the layer where the predicition starts
+    #start marks the last layer that should be updated with backpropagation
+    #end marks the first layer that should be updated with backpropagation
+    #layer count starts from 0
     def train(this, input, solution, learningRate, epoch, forwardStart, start, end):
         this.epoch = epoch
         mSQErrBand = [0]*epoch
         this.learningRate = learningRate
-        decay = 0.0001
         for ep in range(epoch):
 
             # Choose sample to learn
@@ -153,7 +155,6 @@ class ANN:
                 fromNodes = this.layers[l-1].getNodes() # The node values of the previous Layer
                 fromSize = activeWeightSet.shape[0] # The dimension of the previous Layer
                 toSize = activeWeightSet.shape[1] # The dimension of the next Layer
-                #if(l>1): # Only propagate the loss for the next layer when we are not at the last layer
                 propagatedLoss = np.zeros(fromSize)
                 derivToNodes = this.derivActivate(toNodes)
                 biasWeight = np.zeros(toSize)
@@ -162,7 +163,6 @@ class ANN:
                     biasWeight = np.array(this.layers[l].getBias(),copy=True)
                     for f in range(fromSize):
                         for t in range(toSize):
-                 #           if(l>1): # Only propagate the loss for the next layer when we are not at the last layer
                             propagatedLoss[f] += activeWeightSet[f][t] * loss[t]
                             activeWeightSet[f][t] -= learningRate * fromNodes[f] * loss[t] * derivToNodes[t]
                             if(f==0): # Only update the bias weights once while going through TO Nodes
@@ -171,14 +171,11 @@ class ANN:
                 else: # Layer has NO bias weights attached
                     for f in range(fromSize):
                         for t in range(toSize):
-                            #if(l>1): # Only propagate the loss for the next layer when we are not at the last layer
                             propagatedLoss[f] += activeWeightSet[f][t] * loss[t]
                             activeWeightSet[f][t] -= learningRate * fromNodes[f] * loss[t] * derivToNodes[t]
 
-                #if(l>1): # Only propagate the loss for the next layer when we are not at the last layer
                 loss = this.normalize(propagatedLoss)
                 if l-1 >=start and l-1 <end:
-                    #print("updated weight",l-1)
                     this.weights[l-1] = activeWeightSet
                     if(this.layers[l].hasBias()): # Layer has bias weights attached
                         tempWeight = this.layers[l].getBias()
@@ -243,75 +240,33 @@ def preprocMnist(input):
 
 if __name__ == "__main__":
 
+    #Example AutoEncoder
     (train_X, train_y), (test_X, test_y) = mnist.load_data(path="./mnist.npz")
 
     print("Mnist data loaded")
 
     layersDisc = []
-    layersDisc.append(Layer(10,False,"gen"))
-    layersDisc.append(Layer(32,True,"gen"))
-    layersDisc.append(Layer(32,True,"gen"))
-    layersDisc.append(Layer(784,True,"disc"))
-    layersDisc.append(Layer(32,True,"disc"))
-    layersDisc.append(Layer(32,True,"disc"))
-    layersDisc.append(Layer(1,True,"disc"))
-    
+    layersDisc.append(Layer(784,False))
+    layersDisc.append(Layer(32,True))
+    layersDisc.append(Layer(10,True))
+    layersDisc.append(Layer(32,True))
+    layersDisc.append(Layer(784,True))
+
     net = ANN(layersDisc)
-    #net.loadFromDisk("./net")
+    #net.loadFromDisk("./exampleNet")
 
     input = preprocMnist(train_X)
     output = oneHot(train_y)
     
-    #net.setLayerData(input[0],2)
-    #net.predict(2)
-    #net.printWeights()
-    #net.train(np.array(np.random.random_sample((10,1))),np.array(np.random.random_sample((10,1))),0.2,5,0,2)
-    #net.train(input,np.zeros(60000),22,5,0,4)
-    #net.printWeights()
-    #net.persistToDisk("./net")
-    #print("Training starting..")
-    net.loadFromDisk("./netBatch")
+    net.train(input,input,0.15,10,0,0,4) 
+    #net.persistToDisk("./exampleNet")
 
-    for cycle in range(5):
-        #net.train(input[120*cycle:120*(cycle+1)],np.ones(120),0.015,120,3,3,6)
-        #net.train(np.array(np.random.random_sample((120,10))),np.zeros(120),0.015,120,0,3,6)
-        net.train(np.array(np.random.random_sample((240,10))),np.ones(240),0.02,240,0,0,3) 
-        if cycle%10 == 0:
-            #net.persistToDisk("./netBatch")
-            print("Saved net to disk.")
-    
-    #net.persistToDisk("./netBatch")
-    print("Training finished..")
-
-    fig=pyplot.figure(figsize=(10, 8))
-    
+    fig = pyplot.figure(figsize=(10,8)) 
     for cycle in range(6):
-        input = np.array(np.random.random_sample(10))
-        net.setLayerData(input,0)
+        net.setLayerData(input[cycle],0)
         net.predict(0)
 
-        label = net.getOutputData()
-        img = net.getLayerData(3)
-        print(label)
+        img = net.getOutputData()
         fig.add_subplot(2,3,cycle+1)
         pyplot.imshow(img.reshape(28,28))
-
-    print("Showing results")
     pyplot.show()
-
-    # input = preprocMnist(test_X)
-    # output = oneHot(test_y)
-    # solved = 0
-    # print("Testing ...")
-    # for i in range(len(input)):
-    #     net.setInputLayerData(input[i])
-    #     net.predict()
-    #     result = net.getOutputData()
-    #     ind = 0
-    #     for t in range(len(result)):
-    #         ind = t if result[t]>result[ind] else ind
-    #     #print("Truth: ",test_y[i]," Predicted: ",ind)
-    #     if(test_y[i] == ind):
-    #         solved += 1
-    #
-    # print("Precision: ",((float(solved)/float(len(input)))*100.0),"%")
