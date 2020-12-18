@@ -1,4 +1,4 @@
-# A Python implementation of a neural network
+# A python implementation of a neural network
 This framework allow for separate customizable layers that can be stitched together to create a fully connected neural network. 
 The necessary weights backpropagation and the forward-pass will be automatically generated in between the created layers.
 The implementation allows the user to extract node values from every layer to represent each latent space. 
